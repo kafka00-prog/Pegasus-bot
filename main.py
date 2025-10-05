@@ -10,6 +10,7 @@ from colorama import Fore, Style, init
 from collections import deque
 import requests
 import re
+import os
 
 init(autoreset=True)
 
@@ -24,8 +25,8 @@ gatilhos = {
 }
 
 # ======================== VARIÁVEIS DE AMBIENTE ========================
-TOKEN_TELEGRAM = "8380470685:AAGF9TNKOucci3QtUgFcw8J2tWNm-LDmGUY"
-CHAT_ID = -1002923223605
+TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")
+CHAT_ID = int(os.getenv("CHAT_ID"))  # Sempre como inteiro
 
 # ======================== VARIÁVEIS GLOBAIS ========================
 ultimos_ids = deque(maxlen=50)
