@@ -4,6 +4,8 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import time
 from datetime import datetime, timedelta
 from colorama import Fore, Style, init
@@ -47,36 +49,48 @@ def cor_para_texto(numero):
         return "vermelho"
     return "preto"
 
-# ======================== PEGA RESULTADO ========================
+# ======================== FUNÇÃO PEGA RESULTADO SEGURA ========================
 def pegar_ultimo_resultado(driver):
     try:
         cells = driver.find_elements(By.CSS_SELECTOR, ".cell--double, .cell--lucky")
         if not cells:
             return None
         cell = cells[0]
-        class_attr = cell.get_attribute("class") or ""
-        match_id = re.search(r"data-id-([a-f0-9/]+)", class_attr)
-        data_id = match_id.group(1) if match_id else None
 
-        numero_elem = cell.find_element(By.CSS_SELECTOR, ".cell__result")
-        numero_text = numero_elem.text.strip()
+        # Captura número com espera
+        try:
+            numero_elem = WebDriverWait(cell, 1).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".cell__result"))
+            )
+            numero_text = numero_elem.text.strip()
+        except:
+            return None
 
-        hora_elem = cell.find_element(By.CSS_SELECTOR, ".cell__date")
-        hora = hora_elem.text.strip()
+        # Captura hora
+        try:
+            hora_elem = cell.find_element(By.CSS_SELECTOR, ".cell__date")
+            hora = hora_elem.text.strip()
+        except:
+            return None
 
         # Ignorar células sem número válido ou virada de dia
         if not numero_text.isdigit() or "99" in hora:
             return None
 
         numero_int = int(numero_text)
+        class_attr = cell.get_attribute("class") or ""
+        match_id = re.search(r"data-id-([a-f0-9/]+)", class_attr)
+        data_id = match_id.group(1) if match_id else None
+
         return {
             "data_id": data_id,
             "numero": numero_int,
             "cor": cor_para_texto(numero_int),
             "hora": hora
         }
+
     except Exception as e:
-        print(Fore.RED + f"Erro ao capturar resultado: {e}" + Style.RESET_ALL)
+        print(Fore.RED + f"Erro ao capturar resultado (render): {e}" + Style.RESET_ALL)
         return None
 
 def formatar_sinal_telegram(minuto, cor):
