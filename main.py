@@ -23,6 +23,7 @@ gatilhos = {
     10: ("preto", 2),
     14: ("preto", 5)
 }
+
 # ======================== VARIÁVEIS DE AMBIENTE ========================
 TOKEN_TELEGRAM = "8380470685:AAGF9TNKOucci3QtUgFcw8J2tWNm-LDmGUY"
 CHAT_ID = -1002923223605
@@ -50,6 +51,7 @@ def cor_para_texto(numero):
         return "vermelho"
     return "preto"
 
+# ======================== FUNÇÃO MODIFICADA ========================
 def pegar_ultimo_resultado(driver):
     try:
         cells = driver.find_elements(By.CSS_SELECTOR, ".cell--double, .cell--lucky")
@@ -57,13 +59,20 @@ def pegar_ultimo_resultado(driver):
             return None
         cell = cells[0]
         class_attr = cell.get_attribute("class") or ""
-        match_id = re.search(r"data-id-([a-f0-9]+)", class_attr)
+        match_id = re.search(r"data-id-([a-f0-9/]+)", class_attr)
         data_id = match_id.group(1) if match_id else None
+
         numero_elem = cell.find_element(By.CSS_SELECTOR, ".cell__result")
         numero_text = numero_elem.text.strip()
-        numero_int = int(numero_text) if numero_text.isdigit() else 0
+
         hora_elem = cell.find_element(By.CSS_SELECTOR, ".cell__date")
         hora = hora_elem.text.strip()
+
+        # Ignorar células com hora 99 (virada de dia)
+        if hora == "99":
+            return None
+
+        numero_int = int(numero_text) if numero_text.isdigit() else 0
         return {
             "data_id": data_id,
             "numero": numero_int,
@@ -165,4 +174,3 @@ def monitorar_site():
 # ======================== MAIN ========================
 if __name__ == "__main__":
     monitorar_site()
-
