@@ -25,8 +25,8 @@ gatilhos = {
 }
 
 # ======================== VARIÁVEIS DE AMBIENTE ========================
-TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")
-CHAT_ID = os.getenv("CHAT_ID")
+TOKEN_TELEGRAM = "8380470685:AAGF9TNKOucci3QtUgFcw8J2tWNm-LDmGUY"
+CHAT_ID = -1002923223605
 
 # ======================== VARIÁVEIS GLOBAIS ========================
 ultimos_ids = deque(maxlen=50)
@@ -166,3 +166,4 @@ def monitorar_site():
 # ======================== MAIN ========================
 if __name__ == "__main__":
     monitorar_site()
+
