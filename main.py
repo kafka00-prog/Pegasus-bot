@@ -10,9 +10,6 @@ from colorama import Fore, Style, init
 from collections import deque
 import requests
 import re
-import os
-import tkinter as tk
-from tkinter import ttk
 
 init(autoreset=True)
 
@@ -21,9 +18,7 @@ URL_SITE = "https://www.tipminer.com/br/historico/blaze/double"
 
 gatilhos = {
     7: ("vermelho", 4),
-    3: ("vermelho", 5),
-    10: ("preto", 2),
-    14: ("preto", 5)
+    12: ("preto", 3)
 }
 
 TOKEN_TELEGRAM = "8380470685:AAGF9TNKOucci3QtUgFcw8J2tWNm-LDmGUY"
@@ -34,7 +29,6 @@ ultimos_ids = deque(maxlen=50)
 sinal_ativo = None
 pedras_minuto_atual = []
 estatisticas = {"win": 0, "g1_win": 0, "loss": 0}
-estrategia_selecionada = "gatilhos"
 historico_cores = deque(maxlen=10)
 
 # ======================== FUNÇÕES AUXILIARES ========================
@@ -53,7 +47,7 @@ def cor_para_texto(numero):
         return "vermelho"
     return "preto"
 
-# ======================== FUNÇÃO DE RESULTADO ========================
+# ======================== PEGA RESULTADO ========================
 def pegar_ultimo_resultado(driver):
     try:
         cells = driver.find_elements(By.CSS_SELECTOR, ".cell--double, .cell--lucky")
@@ -70,11 +64,11 @@ def pegar_ultimo_resultado(driver):
         hora_elem = cell.find_element(By.CSS_SELECTOR, ".cell__date")
         hora = hora_elem.text.strip()
 
-        # Ignorar células com hora 99 (virada de dia)
-        if hora == "99":
+        # Ignorar células sem número válido ou virada de dia
+        if not numero_text.isdigit() or "99" in hora:
             return None
 
-        numero_int = int(numero_text) if numero_text.isdigit() else 0
+        numero_int = int(numero_text)
         return {
             "data_id": data_id,
             "numero": numero_int,
@@ -92,21 +86,7 @@ def formatar_sinal_telegram(minuto, cor):
             f"🎯 Cor: <b>{cor.capitalize()} {cor_emoji}⚪️</b>\n"
             f"💰 G1 se necessário")
 
-def calcular_assertividade():
-    total = estatisticas["win"] + estatisticas["g1_win"] + estatisticas["loss"]
-    if total == 0:
-        return 0
-    return ((estatisticas["win"] + estatisticas["g1_win"]) / total) * 100
-
-def enviar_relatorio_final():
-    msg = (f"📊 <b>Relatório Atualizado</b>\n\n"
-           f"✅ WIN: {estatisticas['win']}\n"
-           f"✅ G1 WIN: {estatisticas['g1_win']}\n"
-           f"❌ LOSS: {estatisticas['loss']}\n"
-           f"📈 Assertividade: {calcular_assertividade():.2f}%")
-    enviar_telegram(msg)
-
-# ======================== ESTRATÉGIA ORIGINAL ========================
+# ======================== ESTRATÉGIA ========================
 def verificar_gatilhos(numero, minuto_pedra):
     global sinal_ativo, pedras_minuto_atual
     if numero in gatilhos and sinal_ativo is None:
@@ -121,10 +101,8 @@ def verificar_quebra(minuto_pedra):
     global sinal_ativo, pedras_minuto_atual, historico_cores
     if len(historico_cores) < 3 or sinal_ativo is not None:
         return
-
     penultima_cor, penultimo_minuto = historico_cores[-2]
     ultima_cor, ultimo_minuto = historico_cores[-1]
-
     if ultima_cor != penultima_cor:
         sequencia = 1
         for cor, _ in reversed(list(historico_cores)[:-1]):
@@ -138,20 +116,17 @@ def verificar_quebra(minuto_pedra):
             sinal_ativo = {"minuto": minuto_sinal, "cor": cor_sinal, "g1": False}
             pedras_minuto_atual = []
             enviar_telegram(formatar_sinal_telegram(minuto_sinal, cor_sinal))
-            print(Fore.MAGENTA + f"🎯 Quebra detectada | Sequência {sequencia} {cor_sinal} | Sinal {cor_sinal} às {minuto_sinal}" + Style.RESET_ALL)
+            print(Fore.MAGENTA + f"🎯 Quebra detectada | Sequência {sequencia} {cor_sinal} | Sinal às {minuto_sinal}" + Style.RESET_ALL)
 
 def verificar_preto(minuto_pedra):
     global sinal_ativo, pedras_minuto_atual, historico_cores
     if len(historico_cores) < 3 or sinal_ativo is not None:
         return
-
     penultima_cor, penultimo_minuto = historico_cores[-2]
     ultima_cor, ultimo_minuto = historico_cores[-1]
-
-    # Detecta quebra de sequência de preto
     if penultima_cor == "preto" and ultima_cor in ["vermelho", "branco"]:
         sequencia = 1
-        for cor, minuto in reversed(list(historico_cores)[:-1]):
+        for cor, _ in reversed(list(historico_cores)[:-1]):
             if cor == "preto":
                 sequencia += 1
             else:
@@ -176,16 +151,11 @@ def monitorar_site():
     driver.get(URL_SITE)
     time.sleep(3)
     print(Fore.YELLOW + "🔄 Monitorando resultados..." + Style.RESET_ALL)
-    print(Fore.CYAN + f"📌 Estratégia selecionada: {estrategia_selecionada}" + Style.RESET_ALL)
 
     while True:
         try:
             ultimo = pegar_ultimo_resultado(driver)
-            if not ultimo:
-                time.sleep(2)
-                continue
-
-            if ultimo['data_id'] in ultimos_ids:
+            if not ultimo or ultimo['data_id'] in ultimos_ids:
                 time.sleep(2)
                 continue
             ultimos_ids.append(ultimo['data_id'])
@@ -199,15 +169,12 @@ def monitorar_site():
                 histo_texto = " -> ".join([f"{cor.capitalize()}({minuto})" for cor, minuto in historico_cores])
                 print(Fore.CYAN + "📜 Histórico (últimos 10): " + histo_texto + Style.RESET_ALL)
 
-            # Avaliar estratégia
-            if estrategia_selecionada == "gatilhos":
-                verificar_gatilhos(numero, minuto_pedra)
-            elif estrategia_selecionada == "quebra":
-                verificar_quebra(minuto_pedra)
-            elif estrategia_selecionada == "preto":
-                verificar_preto(minuto_pedra)
+            # Avaliar estratégias
+            verificar_gatilhos(numero, minuto_pedra)
+            verificar_quebra(minuto_pedra)
+            verificar_preto(minuto_pedra)
 
-            # Avaliação do sinal (WIN/G1/Loss)
+            # Avaliação WIN/G1/Loss
             if sinal_ativo and minuto_pedra == sinal_ativo['minuto']:
                 pedras_minuto_atual.append(ultimo)
                 if len(pedras_minuto_atual) == 1:
@@ -216,7 +183,6 @@ def monitorar_site():
                         msg = "⚪️ WIN no ZERO (branco)!" if cor_real == "branco" else "✅ WIN na primeira pedra!"
                         print(Fore.GREEN + msg + Style.RESET_ALL)
                         enviar_telegram(f"{msg} - Cor: {cor_real} | Número: {numero}")
-                        enviar_relatorio_final()
                         sinal_ativo = None
                         pedras_minuto_atual = []
                     else:
@@ -228,12 +194,10 @@ def monitorar_site():
                         msg = "⚪️ G1 WIN no ZERO (branco)!" if cor_real == "branco" else "✅ G1 WIN na segunda pedra!"
                         print(Fore.GREEN + msg + Style.RESET_ALL)
                         enviar_telegram(f"{msg} - Cor: {cor_real} | Número: {numero}")
-                        enviar_relatorio_final()
                     else:
                         estatisticas['loss'] += 1
                         print(Fore.RED + "❌ LOSS após G1!" + Style.RESET_ALL)
                         enviar_telegram(f"❌ LOSS - Cor: {cor_real} | Número: {numero}")
-                        enviar_relatorio_final()
                     sinal_ativo = None
                     pedras_minuto_atual = []
 
@@ -242,33 +206,6 @@ def monitorar_site():
             print(Fore.RED + f"Erro no monitoramento: {e}" + Style.RESET_ALL)
             time.sleep(3)
 
-# ======================== GUI ========================
-def iniciar_bot():
-    global estrategia_selecionada
-    estrategia_selecionada = var.get()
-    root.destroy()
-    monitorar_site()
-
-def selecionar_estrategia():
-    global root, var
-    root = tk.Tk()
-    root.title("Seleção de Estratégia")
-    root.geometry("350x220")
-    root.resizable(False, False)
-
-    label = ttk.Label(root, text="Selecione a estratégia:", font=("Arial", 12))
-    label.pack(pady=10)
-
-    var = tk.StringVar(value="gatilhos")
-    ttk.Radiobutton(root, text="🎯 Gatilhos (padrão)", variable=var, value="gatilhos").pack(anchor="w", padx=20)
-    ttk.Radiobutton(root, text="🔀 Quebra de Sequência", variable=var, value="quebra").pack(anchor="w", padx=20)
-    ttk.Radiobutton(root, text="⚫ Somente Preto", variable=var, value="preto").pack(anchor="w", padx=20)
-
-    iniciar_btn = ttk.Button(root, text="Iniciar", command=iniciar_bot)
-    iniciar_btn.pack(pady=20)
-
-    root.mainloop()
-
 # ======================== MAIN ========================
 if __name__ == "__main__":
-    selecionar_estrategia()
+    monitorar_site()
