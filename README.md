@@ -1,4 +1,4 @@
-# Blaze Bot - Render Deployment
+# Pegasus Bot - Render Deployment
 
 ## Passos para Deploy
 
@@ -11,3 +11,4 @@
 5. Comando de inicialização:
 ```bash
 ./start.sh
+
