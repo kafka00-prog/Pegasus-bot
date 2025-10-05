@@ -3,6 +3,7 @@
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 import time
 from datetime import datetime, timedelta
@@ -10,7 +11,7 @@ from colorama import Fore, Style, init
 from collections import deque
 import requests
 import re
-import threading
+import os
 
 init(autoreset=True)
 
@@ -24,6 +25,7 @@ gatilhos = {
     14: ("preto", 5)
 }
 
+# 🔒 Token privado e chat ID direto no código (ok se o repositório for privado)
 TOKEN_TELEGRAM = "8380470685:AAGF9TNKOucci3QtUgFcw8J2tWNm-LDmGUY"
 CHAT_ID = -1002923223605
 
@@ -31,7 +33,6 @@ ultimos_ids = deque(maxlen=50)
 sinal_ativo = None
 pedras_minuto_atual = []
 
-# Estatísticas
 estatisticas = {"win": 0, "g1_win": 0, "loss": 0}
 
 # ======================== FUNÇÕES AUXILIARES ========================
@@ -45,43 +46,52 @@ def enviar_telegram(msg):
 
 def cor_para_texto(numero):
     if numero == 0:
-        return "branco"  # ✅ reconhecimento do zero
+        return "branco"
     elif 1 <= numero <= 7:
         return "vermelho"
     return "preto"
 
 def pegar_ultimo_resultado(driver):
     try:
-        # ✅ Captura tanto números normais quanto o zero (branco)
-        cells = driver.find_elements(By.CSS_SELECTOR, ".cell--double, .cell--lucky")
+        cells = driver.find_elements(By.CSS_SELECTOR, ".cell--double, .cell--lucky, .cell--wild")
         if not cells:
             return None
 
-        cell = cells[0]
-        class_attr = cell.get_attribute("class") or ""
-        match_id = re.search(r"data-id-([a-f0-9]+)", class_attr)
-        data_id = match_id.group(1) if match_id else None
+        for cell in cells:
+            class_attr = cell.get_attribute("class") or ""
+            match_id = re.search(r"data-id-([^\s]+)", class_attr)
+            data_id = match_id.group(1) if match_id else None
 
-        numero_elem = cell.find_element(By.CSS_SELECTOR, ".cell__result")
-        numero_text = numero_elem.text.strip()
+            # Ignorar células inválidas ou placeholders
+            if not data_id or "/" in data_id or "wild" in class_attr:
+                continue
 
-        # ✅ Tratamento especial para branco (zero)
-        if numero_text == "" or numero_text == "0":
-            numero_int = 0
-        else:
-            if not numero_text.isdigit():
-                return None
-            numero_int = int(numero_text)
+            numero_elem = cell.find_element(By.CSS_SELECTOR, ".cell__result")
+            numero_text = numero_elem.text.strip()
+            if numero_text == "":
+                continue
 
-        hora_elem = cell.find_element(By.CSS_SELECTOR, ".cell__date")
-        hora = hora_elem.text.strip()
+            if numero_text == "0":
+                numero_int = 0
+            elif numero_text.isdigit():
+                numero_int = int(numero_text)
+            else:
+                continue
 
-        return {
-            "data_id": data_id,
-            "numero": numero_int,
-            "cor": cor_para_texto(numero_int),
-            "hora": hora
-        }
+            hora_elem = cell.find_element(By.CSS_SELECTOR, ".cell__date")
+            hora = hora_elem.text.strip()
+            if "99" in hora or hora == "":
+                continue
+
+            return {
+                "data_id": data_id,
+                "numero": numero_int,
+                "cor": cor_para_texto(numero_int),
+                "hora": hora
+            }
+
+        return None
+
     except Exception as e:
         print(Fore.RED + f"Erro ao capturar resultado: {e}" + Style.RESET_ALL)
         return None
@@ -93,21 +103,19 @@ def formatar_sinal_telegram(minuto, cor):
             f"🎯 Cor: <b>{cor.capitalize()} {cor_emoji}⚪️</b>\n"
             f"💰 G1 se necessário")
 
-def enviar_relatorio():
-    while True:
-        time.sleep(300)  # envia a cada 5 minutos
-        msg = (f"📊 <b>Relatório Parcial</b>\n\n"
-               f"✅ WIN: {estatisticas['win']}\n"
-               f"✅ G1 WIN: {estatisticas['g1_win']}\n"
-               f"❌ LOSS: {estatisticas['loss']}\n"
-               f"📈 Assertividade: {calcular_assertividade():.2f}%")
-        enviar_telegram(msg)
-
 def calcular_assertividade():
     total = estatisticas["win"] + estatisticas["g1_win"] + estatisticas["loss"]
     if total == 0:
         return 0
     return ((estatisticas["win"] + estatisticas["g1_win"]) / total) * 100
+
+def enviar_relatorio():
+    msg = (f"📊 <b>Relatório Parcial</b>\n\n"
+           f"✅ WIN: {estatisticas['win']}\n"
+           f"✅ G1 WIN: {estatisticas['g1_win']}\n"
+           f"❌ LOSS: {estatisticas['loss']}\n"
+           f"📈 Assertividade: {calcular_assertividade():.2f}%")
+    enviar_telegram(msg)
 
 # ======================== MONITORAMENTO ========================
 def monitorar_site():
@@ -116,10 +124,19 @@ def monitorar_site():
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--log-level=3")
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
-    driver = webdriver.Chrome(options=options)
+    chrome_path = os.getenv("CHROME_PATH", "/usr/bin/chromium")
+    driver_path = os.getenv("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
+    options.binary_location = chrome_path
+
+    # ✅ Compatível com Selenium 4+
+    service = Service(driver_path)
+    driver = webdriver.Chrome(service=service, options=options)
+
     driver.get(URL_SITE)
     time.sleep(3)
     print(Fore.YELLOW + "🔄 Monitorando resultados..." + Style.RESET_ALL)
@@ -140,7 +157,7 @@ def monitorar_site():
             cor_real = ultimo['cor']
             minuto_pedra = ultimo['hora']
 
-            # 1 - Detecta Gatilho
+            # Detecta gatilho
             if numero in gatilhos and sinal_ativo is None:
                 cor, delay = gatilhos[numero]
                 minuto_sinal = (datetime.strptime(minuto_pedra, "%H:%M") + timedelta(minutes=delay)).strftime("%H:%M")
@@ -149,29 +166,29 @@ def monitorar_site():
                 print(Fore.GREEN + f"🚨 Gatilho detectado | Sinal para {minuto_sinal} | Cor: {cor}" + Style.RESET_ALL)
                 enviar_telegram(formatar_sinal_telegram(minuto_sinal, cor))
 
-            # 2 - Monitoramento do minuto do sinal
+            # Verifica o minuto do sinal
             if sinal_ativo and minuto_pedra == sinal_ativo['minuto']:
                 pedras_minuto_atual.append(ultimo)
 
-                # Primeira pedra
                 if len(pedras_minuto_atual) == 1:
                     if cor_real == sinal_ativo['cor']:
                         estatisticas['win'] += 1
                         print(Fore.GREEN + "✅ WIN na primeira pedra!" + Style.RESET_ALL)
                         enviar_telegram(f"✅ WIN - Cor: {cor_real} | Número: {numero}")
+                        enviar_relatorio()
                         sinal_ativo = None
                         pedras_minuto_atual = []
                     elif cor_real == "branco":
                         estatisticas['win'] += 1
                         print(Fore.CYAN + "⚪️ WIN no ZERO (branco)!" + Style.RESET_ALL)
                         enviar_telegram(f"⚪️ WIN no ZERO (Branco) - Número: {numero}")
+                        enviar_relatorio()
                         sinal_ativo = None
                         pedras_minuto_atual = []
                     else:
                         print(Fore.YELLOW + "⚠️ Primeira pedra não bateu, aguardando G1..." + Style.RESET_ALL)
                         sinal_ativo['g1'] = True
 
-                # G1 (segunda pedra)
                 elif len(pedras_minuto_atual) == 2 and sinal_ativo:
                     if cor_real == sinal_ativo['cor']:
                         estatisticas['g1_win'] += 1
@@ -185,6 +202,7 @@ def monitorar_site():
                         estatisticas['loss'] += 1
                         print(Fore.RED + "❌ LOSS após G1!" + Style.RESET_ALL)
                         enviar_telegram(f"❌ LOSS - Cor: {cor_real} | Número: {numero}")
+                    enviar_relatorio()
                     sinal_ativo = None
                     pedras_minuto_atual = []
 
@@ -196,5 +214,4 @@ def monitorar_site():
 
 # ======================== EXECUÇÃO ========================
 if __name__ == "__main__":
-    threading.Thread(target=enviar_relatorio, daemon=True).start()
     monitorar_site()
