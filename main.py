@@ -4,6 +4,7 @@
 import os
 import time
 import re
+import threading
 import requests
 from datetime import datetime, timedelta
 from collections import deque
@@ -11,6 +12,7 @@ from colorama import Fore, Style, init
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from flask import Flask
 
 init(autoreset=True)
 
@@ -34,9 +36,19 @@ pedras_minuto_atual = []
 estatisticas = {"win": 0, "g1_win": 0, "loss": 0}
 historico_cores = deque(maxlen=10)
 
+# ======================== FLASK SERVER ========================
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "✅ Bot Blaze Monitor ativo e rodando!"
+
 # ======================== FUNÇÕES AUXILIARES ========================
 def enviar_telegram(msg):
     try:
+        if not TOKEN_TELEGRAM or not CHAT_ID:
+            print(Fore.YELLOW + "⚠️ TOKEN_TELEGRAM ou CHAT_ID não definidos." + Style.RESET_ALL)
+            return
         url = f"https://api.telegram.org/bot{TOKEN_TELEGRAM}/sendMessage"
         payload = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"}
         requests.post(url, data=payload, timeout=10)
@@ -56,21 +68,14 @@ def pegar_ultimo_resultado(driver):
         if not cells:
             return None
         cell = cells[0]
-
-        # Ignora células do início do dia
         data_hour = cell.get_attribute("data-hour")
         data_minute = cell.get_attribute("data-minute")
         data_last_minute = cell.get_attribute("data-last_minute")
         if data_hour == "99" or data_minute == "99" or data_last_minute == "99":
             return None
-
         numero_elem = cell.find_element(By.CSS_SELECTOR, ".cell__result")
         numero_text = numero_elem.text.strip()
-        if not numero_text.isdigit():
-            numero_int = 0
-        else:
-            numero_int = int(numero_text)
-
+        numero_int = int(numero_text) if numero_text.isdigit() else 0
         class_attr = cell.get_attribute("class") or ""
         match_id = re.search(r"data-id-([a-f0-9]+)", class_attr)
         data_id = match_id.group(1) if match_id else None
@@ -100,7 +105,7 @@ def enviar_relatorio_final():
            f"📈 Assertividade: {calcular_assertividade():.2f}%")
     enviar_telegram(msg)
 
-# ======================== ESTRATÉGIA GATILHOS ========================
+# ======================== ESTRATÉGIA ========================
 def verificar_gatilhos(numero, minuto_pedra):
     global sinal_ativo, pedras_minuto_atual
     if numero in gatilhos and sinal_ativo is None:
@@ -141,10 +146,8 @@ def monitorar_site():
                 histo_texto = " -> ".join([f"{c.capitalize()}({m})" for c, m in historico_cores])
                 print(Fore.CYAN + "📜 Histórico (últimos 10): " + histo_texto + Style.RESET_ALL)
 
-            # Verifica gatilho apenas se não há sinal ativo
             verificar_gatilhos(numero, minuto_pedra)
 
-            # Avaliação do sinal (WIN/G1/Loss)
             if sinal_ativo and minuto_pedra == sinal_ativo['minuto']:
                 pedras_minuto_atual.append(ultimo)
                 if len(pedras_minuto_atual) == 1:
@@ -173,12 +176,17 @@ def monitorar_site():
                         enviar_relatorio_final()
                     sinal_ativo = None
                     pedras_minuto_atual = []
-
             time.sleep(2)
         except Exception as e:
             print(Fore.RED + f"Erro no monitoramento: {e}" + Style.RESET_ALL)
             time.sleep(3)
 
-# ======================== MAIN ========================
+# ======================== EXECUÇÃO RENDER ========================
 if __name__ == "__main__":
-    monitorar_site()
+    # Inicia monitoramento em thread separada
+    threading.Thread(target=monitorar_site, daemon=True).start()
+    print(Fore.MAGENTA + "🚀 Servidor web iniciado (Render em execução)" + Style.RESET_ALL)
+
+    # Mantém app web ativo
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
