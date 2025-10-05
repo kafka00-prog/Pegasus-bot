@@ -26,6 +26,7 @@ gatilhos = {
     14: ("preto", 5)
 }
 
+# Carregar variáveis de ambiente (se estiverem definidas no Render ou servidor)
 TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")
 CHAT_ID = os.getenv("CHAT_ID")
 
