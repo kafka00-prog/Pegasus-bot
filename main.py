@@ -19,9 +19,10 @@ URL_SITE = "https://www.tipminer.com/br/historico/blaze/double"
 
 gatilhos = {
     7: ("vermelho", 4),
-    12: ("preto", 3)
+    3: ("vermelho", 5),
+    10: ("preto", 2),
+    14: ("preto", 5)
 }
-
 # ======================== VARIÁVEIS DE AMBIENTE ========================
 TOKEN_TELEGRAM = "8380470685:AAGF9TNKOucci3QtUgFcw8J2tWNm-LDmGUY"
 CHAT_ID = -1002923223605
@@ -164,3 +165,4 @@ def monitorar_site():
 # ======================== MAIN ========================
 if __name__ == "__main__":
     monitorar_site()
+
