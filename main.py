@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
+import time
+import re
+import requests
+from datetime import datetime, timedelta
+from collections import deque
+from colorama import Fore, Style, init
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-import time
-from datetime import datetime, timedelta
-from colorama import Fore, Style, init
-from collections import deque
-import requests
-import re
-import os
 
 init(autoreset=True)
 
@@ -26,7 +26,7 @@ gatilhos = {
 
 # ======================== VARIÁVEIS DE AMBIENTE ========================
 TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")
-CHAT_ID = int(os.getenv("CHAT_ID"))  # Sempre como inteiro
+CHAT_ID = os.getenv("CHAT_ID")
 
 # ======================== VARIÁVEIS GLOBAIS ========================
 ultimos_ids = deque(maxlen=50)
@@ -34,6 +34,10 @@ sinal_ativo = None
 pedras_minuto_atual = []
 estatisticas = {"win": 0, "g1_win": 0, "loss": 0}
 historico_cores = deque(maxlen=10)
+
+# ======================== CONFIGURA FUSO HORÁRIO ========================
+os.environ['TZ'] = 'America/Sao_Paulo'
+time.tzset()
 
 # ======================== FUNÇÕES AUXILIARES ========================
 def enviar_telegram(msg):
@@ -59,7 +63,7 @@ def pegar_ultimo_resultado(driver):
             return None
         cell = cells[0]
 
-        # 🔹 Ignora células do início do dia
+        # Ignora células do início do dia
         data_hour = cell.get_attribute("data-hour")
         data_minute = cell.get_attribute("data-minute")
         data_last_minute = cell.get_attribute("data-last_minute")
@@ -116,13 +120,9 @@ def verificar_gatilhos(numero, minuto_pedra):
     if numero in gatilhos and sinal_ativo is None:
         cor, delay = gatilhos[numero]
 
-        # Lógica interna UTC
         hora_original = datetime.strptime(minuto_pedra, "%H:%M")
         hora_sinal = hora_original + timedelta(minutes=delay)
-
-        # 🔧 Apenas para exibição: fuso Brasília (UTC-3)
-        hora_exibicao = hora_sinal - timedelta(hours=3)
-        minuto_sinal_exibicao = hora_exibicao.strftime("%H:%M")
+        minuto_sinal_exibicao = hora_sinal.strftime("%H:%M")
 
         sinal_ativo = {"minuto": hora_sinal.strftime("%H:%M"), "cor": cor, "g1": False}
         pedras_minuto_atual = []
