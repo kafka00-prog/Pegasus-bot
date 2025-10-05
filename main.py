@@ -51,30 +51,52 @@ def cor_para_texto(numero):
         return "vermelho"
     return "preto"
 
+# ======================== CAPTURA DE RESULTADO ========================
 def pegar_ultimo_resultado(driver):
     try:
         cells = driver.find_elements(By.CSS_SELECTOR, ".cell--double, .cell--lucky")
         if not cells:
             return None
-        cell = cells[0]
-        class_attr = cell.get_attribute("class") or ""
-        match_id = re.search(r"data-id-([a-f0-9]+)", class_attr)
-        data_id = match_id.group(1) if match_id else None
-        numero_elem = cell.find_element(By.CSS_SELECTOR, ".cell__result")
-        numero_text = numero_elem.text.strip()
-        numero_int = int(numero_text) if numero_text.isdigit() else 0
-        hora_elem = cell.find_element(By.CSS_SELECTOR, ".cell__date")
-        hora = hora_elem.text.strip()
-        return {
-            "data_id": data_id,
-            "numero": numero_int,
-            "cor": cor_para_texto(numero_int),
-            "hora": hora
-        }
+
+        for cell in cells:
+            class_attr = cell.get_attribute("class") or ""
+
+            # Ignorar marcadores de início do dia ou placeholders (99)
+            if "data-hour-99" in class_attr or "data-minute-99" in class_attr:
+                print(Fore.YELLOW + "⏸️ Ignorando marcador de início do dia (99)..." + Style.RESET_ALL)
+                continue
+
+            # Extrai o ID (corrigido para formatos com /)
+            match_id = re.search(r"data-id-([\d/]+)", class_attr)
+            data_id = match_id.group(1) if match_id else None
+
+            # Número da pedra
+            numero_elem = cell.find_element(By.CSS_SELECTOR, ".cell__result")
+            numero_text = numero_elem.text.strip()
+            numero_int = int(numero_text) if numero_text.isdigit() else 0
+
+            # Pega o horário exibido (HH:MM)
+            hora_elem = cell.find_element(By.CSS_SELECTOR, ".cell__date")
+            hora_texto = hora_elem.text.strip()
+
+            # Ignorar blocos que não sejam horário (ex.: “05/10”, “INÍCIO DO DIA”)
+            if not re.match(r"^\d{2}:\d{2}$", hora_texto):
+                continue
+
+            return {
+                "data_id": data_id,
+                "numero": numero_int,
+                "cor": cor_para_texto(numero_int),
+                "hora": hora_texto
+            }
+
+        return None
+
     except Exception as e:
         print(Fore.RED + f"Erro ao capturar resultado: {e}" + Style.RESET_ALL)
         return None
 
+# ======================== TELEGRAM E EXIBIÇÃO ========================
 def formatar_sinal_telegram(minuto, cor):
     cor_emoji = "🔴" if cor == "vermelho" else "⚫️"
     return (f"🚨 <b>SINAL DETECTADO</b>\n"
@@ -118,6 +140,7 @@ def monitorar_site():
             if not ultimo or ultimo['data_id'] in ultimos_ids:
                 time.sleep(2)
                 continue
+
             ultimos_ids.append(ultimo['data_id'])
 
             numero = ultimo['numero']
