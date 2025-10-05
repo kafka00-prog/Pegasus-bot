@@ -25,8 +25,8 @@ gatilhos = {
 }
 
 # ======================== VARIÁVEIS DE AMBIENTE ========================
-TOKEN_TELEGRAM = "8380470685:AAGF9TNKOucci3QtUgFcw8J2tWNm-LDmGUY"
-CHAT_ID = -1002923223605
+TOKEN_TELEGRAM = os.getenv("8380470685:AAGF9TNKOucci3QtUgFcw8J2tWNm-LDmGUY")
+CHAT_ID = int(os.getenv("-1002923223605"))  # Lembre-se: Render só aceita int para chat_id negativo
 
 # ======================== VARIÁVEIS GLOBAIS ========================
 ultimos_ids = deque(maxlen=50)
@@ -51,18 +51,30 @@ def cor_para_texto(numero):
         return "vermelho"
     return "preto"
 
+# ======================== PEGA RESULTADO ========================
 def pegar_ultimo_resultado(driver):
     try:
         cells = driver.find_elements(By.CSS_SELECTOR, ".cell--double, .cell--lucky")
         if not cells:
             return None
         cell = cells[0]
+
+        # 🔹 Ignora células do início do dia
+        data_hour = cell.get_attribute("data-hour")
+        data_minute = cell.get_attribute("data-minute")
+        data_last_minute = cell.get_attribute("data-last_minute")
+        if data_hour == "99" or data_minute == "99" or data_last_minute == "99":
+            return None
+
+        numero_elem = cell.find_element(By.CSS_SELECTOR, ".cell__result")
+        numero_text = numero_elem.text.strip()
+        if not numero_text.isdigit():
+            return None
+
+        numero_int = int(numero_text)
         class_attr = cell.get_attribute("class") or ""
         match_id = re.search(r"data-id-([a-f0-9]+)", class_attr)
         data_id = match_id.group(1) if match_id else None
-        numero_elem = cell.find_element(By.CSS_SELECTOR, ".cell__result")
-        numero_text = numero_elem.text.strip()
-        numero_int = int(numero_text) if numero_text.isdigit() else 0
         hora_elem = cell.find_element(By.CSS_SELECTOR, ".cell__date")
         hora = hora_elem.text.strip()
         return {
@@ -75,6 +87,7 @@ def pegar_ultimo_resultado(driver):
         print(Fore.RED + f"Erro ao capturar resultado: {e}" + Style.RESET_ALL)
         return None
 
+# ======================== FORMATA SINAL ========================
 def formatar_sinal_telegram(minuto, cor):
     cor_emoji = "🔴" if cor == "vermelho" else "⚫️"
     return (f"🚨 <b>SINAL DETECTADO</b>\n"
@@ -88,16 +101,34 @@ def calcular_assertividade():
         return 0
     return ((estatisticas["win"] + estatisticas["g1_win"]) / total) * 100
 
+# ======================== RELATÓRIO AUTOMÁTICO ========================
+def enviar_relatorio_final():
+    msg = (f"📊 <b>Relatório Atualizado</b>\n\n"
+           f"✅ WIN: {estatisticas['win']}\n"
+           f"✅ G1 WIN: {estatisticas['g1_win']}\n"
+           f"❌ LOSS: {estatisticas['loss']}\n"
+           f"📈 Assertividade: {calcular_assertividade():.2f}%")
+    enviar_telegram(msg)
+
 # ======================== ESTRATÉGIA GATILHOS ========================
 def verificar_gatilhos(numero, minuto_pedra):
     global sinal_ativo, pedras_minuto_atual
     if numero in gatilhos and sinal_ativo is None:
         cor, delay = gatilhos[numero]
-        minuto_sinal = (datetime.strptime(minuto_pedra, "%H:%M") + timedelta(minutes=delay)).strftime("%H:%M")
-        sinal_ativo = {"minuto": minuto_sinal, "cor": cor, "g1": False}
+
+        # Lógica interna UTC
+        hora_original = datetime.strptime(minuto_pedra, "%H:%M")
+        hora_sinal = hora_original + timedelta(minutes=delay)
+
+        # 🔧 Apenas para exibição: fuso Brasília (UTC-3)
+        hora_exibicao = hora_sinal - timedelta(hours=3)
+        minuto_sinal_exibicao = hora_exibicao.strftime("%H:%M")
+
+        sinal_ativo = {"minuto": hora_sinal.strftime("%H:%M"), "cor": cor, "g1": False}
         pedras_minuto_atual = []
-        enviar_telegram(formatar_sinal_telegram(minuto_sinal, cor))
-        print(Fore.GREEN + f"🚨 Gatilho detectado | Sinal para {minuto_sinal} | Cor: {cor}" + Style.RESET_ALL)
+
+        enviar_telegram(formatar_sinal_telegram(minuto_sinal_exibicao, cor))
+        print(Fore.GREEN + f"🚨 Gatilho detectado | Sinal para {minuto_sinal_exibicao} | Cor: {cor}" + Style.RESET_ALL)
 
 # ======================== MONITORAMENTO ========================
 def monitorar_site():
@@ -140,6 +171,7 @@ def monitorar_site():
                         msg = "⚪️ WIN no ZERO (branco)!" if cor_real == "branco" else "✅ WIN na primeira pedra!"
                         print(Fore.GREEN + msg + Style.RESET_ALL)
                         enviar_telegram(f"{msg} - Cor: {cor_real} | Número: {numero}")
+                        enviar_relatorio_final()
                         sinal_ativo = None
                         pedras_minuto_atual = []
                     else:
@@ -151,10 +183,12 @@ def monitorar_site():
                         msg = "⚪️ G1 WIN no ZERO (branco)!" if cor_real == "branco" else "✅ G1 WIN na segunda pedra!"
                         print(Fore.GREEN + msg + Style.RESET_ALL)
                         enviar_telegram(f"{msg} - Cor: {cor_real} | Número: {numero}")
+                        enviar_relatorio_final()
                     else:
                         estatisticas['loss'] += 1
                         print(Fore.RED + "❌ LOSS após G1!" + Style.RESET_ALL)
                         enviar_telegram(f"❌ LOSS - Cor: {cor_real} | Número: {numero}")
+                        enviar_relatorio_final()
                     sinal_ativo = None
                     pedras_minuto_atual = []
 
@@ -166,4 +200,3 @@ def monitorar_site():
 # ======================== MAIN ========================
 if __name__ == "__main__":
     monitorar_site()
-
