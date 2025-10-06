@@ -21,12 +21,9 @@ URL_SITE = "https://www.tipminer.com/br/historico/blaze/double"
 
 gatilhos = {
     7: ("vermelho", 4),
-    5: ("vermelho", 2),
-    6: ("vermelho", 2),
     3: ("vermelho", 5),
     8: ("preto", 2),
-    10: ("preto", 2),
-    14: ("preto", 5)
+    10: ("preto", 2)
 }
 
 # Carregar variáveis de ambiente (se estiverem definidas no Render ou servidor)
@@ -194,6 +191,7 @@ if __name__ == "__main__":
     # Mantém app web ativo
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
 
 
