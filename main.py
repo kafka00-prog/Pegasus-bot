@@ -20,7 +20,7 @@ init(autoreset=True)
 URL_SITE = "https://www.tipminer.com/br/historico/blaze/double"
 
 gatilhos = {
-    7: ("vermelho", 4),
+    7: ("vermelho", 3),
        10: ("preto", 2)
 }
 
@@ -189,6 +189,7 @@ if __name__ == "__main__":
     # Mantém app web ativo
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
 
 
