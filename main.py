@@ -20,11 +20,7 @@ init(autoreset=True)
 URL_SITE = "https://www.tipminer.com/br/historico/blaze/double"
 
 gatilhos = {
-    7: ("vermelho", 4),
-    3: ("vermelho", 5),
-    10: ("preto", 2),
-    9: ("preto", 2),
-    14: ("preto", 3)
+    5: ("vermelho", 6),
 }
 
 # Carregar variáveis de ambiente (se estiverem definidas no Render ou servidor)
